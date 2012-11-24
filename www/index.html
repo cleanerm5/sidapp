@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>The Second SESAR Innovation Days</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+		<link rel="stylesheet" href="script/jquery.mobile-1.0.1.min.css" />
+		<script src="script/jquery-1.6.4.min.js"></script>
+		<script src="script/jquery.mobile-1.0.1.min.js"></script>
+		<script src="script/cordova-2.1.0.js"></script>
+		<script>
+			var deviceReady = false;
+			var documentReady = false;
+
+			function pageBeforeChangeHook(e, data) {
+				if (typeof data.toPage === "string") {
+					if (data.toPage.endsWith("one") == false &&
+						data.toPage.endsWith("welcome") == false &&
+						data.toPage.endsWith("news") == false &&
+						data.toPage.endsWith("programme") == false &&
+						data.toPage.endsWith("events") == false &&
+						data.toPage.endsWith("abstracts") == false)
+					{
+						$.mobile.changePage($('#one'), { transition: "none" });
+						e.preventDefault();
+					}
+				}
+			}
+
+			function initPageAfterLoad() {
+				$(document).bind( "pagebeforechange", pageBeforeChangeHook);
+				$.mobile.changePage($('#one'), { transition: "none" });
+				var dummyPage = $('div[data-url="/"]');
+				if (dummyPage.length > 0) {
+					dummyPage.remove();
+				}								
+			}
+
+			function readFail(e) {
+				$.get('template/sidContent.html', function(responseText, textStatus) {
+					$('body').prepend(responseText);
+					initPageAfterLoad();
+				});
+		    }
+
+		    function checkConnection() {
+		    	return (navigator.network.connection.type != Connection.NONE);
+	    	}
+
+			function onLoad() {
+				document.addEventListener("deviceready", onDeviceReady, false);
+			}
+
+			function writeLocalTemplateFile(content) {
+				window.requestFileSystem(LocalFileSystem.PERSISTENT, 0, function(fileSystem) {
+					fileSystem.root.getFile("sidContent.html", {create: true, exclusive: false}, function(fileEntry) { fileEntry.createWriter( function(writer) { writer.write(content.html); }); });
+					fileSystem.root.getFile("fileDate.txt", {create: true, exclusive: false}, function(fileEntry) { fileEntry.createWriter( function(writer) { writer.write(content.date); }); }); });
+			}
+
+			function updateDataFromFile() {
+				window.requestFileSystem(LocalFileSystem.PERSISTENT, 0, function(fileSystem) {
+					fileSystem.root.getFile("sidContentx.html", null, function(fileEntry) { fileEntry.file( function(file) { var reader = new FileReader(); reader.onloadend = function(evt) { $('body').prepend(evt.target.result); initPageAfterLoad(); }; reader.readAsText(file); }, readFail); }, readFail); }, readFail );
+			}
+
+			function updateDataFromServer(localFileDate) {
+				var currentDate = new Date();
+				$.ajax({
+					type: 'POST',
+					url: 'http://sidbs2012.appspot.com/sidservice',
+					data: { date: localFileDate },
+					success: function(response) {
+						if (response == "") {
+							updateDataFromFile();
+						} else {
+							if (response.html.toLowerCase() == 'empty') {
+								updateDataFromFile();
+							} else {
+								localDate = response.date;
+								writeLocalTemplateFile(response);
+								$('body').prepend(response.html);
+								initPageAfterLoad();
+							}
+						}
+					},
+				  	error: function() {
+				  		updateDataFromFile();
+				  	}
+				 });
+			}
+
+			function checkLocalDate() {
+				window.requestFileSystem(LocalFileSystem.PERSISTENT, 0, function(fileSystem) {
+					fileSystem.root.getFile("fileDate.txt", null, function(fileEntry) { fileEntry.file( function(file) { var reader = new FileReader(); reader.onloadend = function(evt) { updateDataFromServer(parseInt(evt.target.result)); }; reader.readAsText(file); }, function() { updateDataFromServer(0); } ); }, function() { updateDataFromServer(0); }); }, function() { updateDataFromServer(0); });
+			}
+
+			function updateSite() {
+				if (checkConnection()) {
+					checkLocalDate();
+				} else {
+					updateDataFromFile();
+				}				
+			}
+
+		    function onDeviceReady() {
+				document.addEventListener("backbutton", function(e) {
+					if($.mobile.activePage.is('#one')){
+						e.preventDefault();
+						navigator.app.exitApp();
+		    	    }
+		    	    else {
+		    	        navigator.app.backHistory()
+		    	    }
+		    	}, false);
+		    	deviceReady = true;
+		    	if (deviceReady == true && documentReady == true) {
+		    		updateSite();
+		    	}
+		    }
+
+			$(document).ready(function() {
+				String.prototype.endsWith = function(str) { return (this.match(str+"$") == str) }
+				documentReady = true;
+		    	if (deviceReady == true && documentReady == true) {
+		    		updateSite();
+		    	}
+			});
+		</script>
+	</head>
+	<body onload="onLoad()">
+	</body>
+</html>
